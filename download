@@ -1,0 +1,74 @@
+#!/bin/bash
+
+# glibc mirror url
+url="http://archive.ubuntu.com/ubuntu/pool/main/g/glibc"
+# url="https://mirrors.tuna.tsinghua.edu.cn/ubuntu/pool/main/g/glibc"
+
+# switch to download other type
+perfix="libc6_"
+postfix="\.deb"
+pathInDeb="lib"
+
+# perfix="libc6-dev_"
+# postfix="\.deb"
+# pathInDeb="usr/lib"
+
+# perfix="libc6-dbg_"
+# postfix="\.deb"
+# pathInDeb="usr/lib/debug/lib"
+
+if [[ $# -ne 1 ]]; then
+	echo "Usage: $0 dbPath"
+	exit 1
+fi
+
+die() {
+  echo >&2 $1
+  exit 1
+}
+
+get_deb(){
+    local file="$1"
+    local tmp=`mktemp -d`
+    local dirname=${file%${postfix}}
+    dirname=${dirname#${perfix}}
+    echo "$file"
+
+    if [[ -d $dbPath/$dirname ]];then
+        echo "Path $dbPath/$dirname has been exsited."
+        echo "Skip."
+        return
+    fi
+
+    echo "Getting $file"
+    wget "$url/$file" -O "$tmp/pkg.deb" -q --tries=0 || die "Failed to download package from $url"
+    pushd "$tmp" 1>/dev/null
+    ar x "$tmp/pkg.deb" || die "ar failed"
+    tar xf $tmp/data.tar.* || die "tar failed"
+    popd 1>/dev/null
+    local t=`ls $tmp/$pathInDeb | grep linux-gnu`
+    mv "$tmp/$pathInDeb/$t" "$dbPath/$dirname/"
+    rm -rf "$tmp"
+}
+
+get_all(){
+    echo "Getting index"
+    local indexhtml=`mktemp`
+    wget $url/ -O - -q | grep -o "href=\"${perfix}[^\"]*${postfix}\"" > $indexhtml
+    local files=`cat $indexhtml  | awk -F '"' '{print $2}'`
+    local total=`wc -l $indexhtml | awk '{print $1}'`
+    rm $indexhtml
+    echo "Start to download"
+    local i=0
+    for file in $files ; do
+        echo -n -e "\033[35m\033[1m[$i/$total]\033[0m "
+        get_deb $file
+        ((i++))
+    done
+    echo "Finish."
+}
+
+dbPath="$1"
+mkdir -p $dbPath
+
+get_all

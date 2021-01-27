@@ -1,0 +1,43 @@
+#!/bin/bash
+if [[ $# -ne 3 ]]; then
+	echo "Usage: $0 dbPath Glibc_Version|system Target_File"
+	exit 1
+fi
+
+dbPath=`realpath "$1"`
+pversion="$2"
+targetFile="$3"
+is32=`readelf -h $targetFile | grep "ELF32" -o`
+
+if [[ $pversion == 'system' ]];then
+	if [[ -n $is32 ]]; then
+		patchelf --set-interpreter /lib/ld-linux.so.2 --set-rpath /lib/i386-linux-gnu $targetFile
+	else
+		patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 --set-rpath /lib/x86_64-linux-gnu $targetFile
+	fi
+	exit 0
+fi
+
+if [[ -d $dbPath/$pversion ]]; then
+	version=`echo $pversion | cut -d - -f1`
+	patchelf --set-interpreter $dbPath/$pversion/ld-$version.so --set-rpath $dbPath/$pversion $targetFile
+fi
+
+if [[ -n $is32 ]]; then
+	list=`ls -1 "$dbPath" | grep "^$pversion.*_i386$"`
+else
+	list=`ls -1 "$dbPath" | grep "^$pversion.*_amd64$"`
+fi
+
+echo "Avalibable Version:"
+i=0
+for file in $list;do
+	echo "[$i] $file"
+	filelist[$i]=$file
+	((i++))
+done
+read -p "Please choose one: " index
+pversion="${filelist[$index]}"
+
+version=`echo $pversion | cut -d - -f1`
+patchelf --set-interpreter $dbPath/$pversion/ld-$version.so --set-rpath $dbPath/$pversion $targetFile
