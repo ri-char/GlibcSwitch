@@ -1,24 +1,20 @@
 #!/bin/bash
 
 # glibc mirror url
-url="http://archive.ubuntu.com/ubuntu/pool/main/g/glibc"
-# url="https://mirrors.tuna.tsinghua.edu.cn/ubuntu/pool/main/g/glibc"
+# url="http://archive.ubuntu.com/ubuntu/pool/main/g/glibc"
+url="https://mirrors.tuna.tsinghua.edu.cn/ubuntu/pool/main/g/glibc"
 
 # switch to download other type
 perfix="libc6_"
 postfix="\.deb"
 pathInDeb="lib"
 
-# perfix="libc6-dev_"
-# postfix="\.deb"
-# pathInDeb="usr/lib"
+dbg_perfix="libc6-dbg_"
+dbg_postfix="\.deb"
+dbg_pathInDeb="usr/lib/debug/lib"
 
-# perfix="libc6-dbg_"
-# postfix="\.deb"
-# pathInDeb="usr/lib/debug/lib"
-
-if [[ $# -ne 1 ]]; then
-	echo "Usage: $0 dbPath"
+if [[ $# -ne 2 ]]; then
+	echo "Usage: $0 dbPath all|bin|dbg"
 	exit 1
 fi
 
@@ -27,7 +23,7 @@ die() {
   exit 1
 }
 
-get_deb(){
+get_glibc_deb(){
     local file="$1"
     local tmp=`mktemp -d`
     local dirname=${file%${postfix}}
@@ -51,8 +47,8 @@ get_deb(){
     rm -rf "$tmp"
 }
 
-get_all(){
-    echo "Getting index"
+get_glibc_all(){
+    echo "Getting glibc index"
     local indexhtml=`mktemp`
     wget $url/ -O - -q | grep -o "href=\"${perfix}[^\"]*${postfix}\"" > $indexhtml
     local files=`cat $indexhtml  | awk -F '"' '{print $2}'`
@@ -62,7 +58,55 @@ get_all(){
     local i=0
     for file in $files ; do
         echo -n -e "\033[35m\033[1m[$i/$total]\033[0m "
-        get_deb $file
+        get_glibc_deb $file
+        ((i++))
+    done
+    echo "Finish."
+}
+
+
+get_glibc_dbg_deb(){
+    local file="$1"
+    local tmp=`mktemp -d`
+    local dirname=${file%${dbg_postfix}}
+    dirname=${dirname#${dbg_perfix}}
+    echo "$file"
+
+    if [[ ! -d $dbPath/$dirname ]];then
+        echo "Path $dbPath/$dirname doesn't exsited."
+        echo "Skip."
+        return
+    fi
+
+    if [[ -d $dbPath/$dirname/.debug ]];then
+        echo "Path $dbPath/$dirname/.debug has been exsited."
+        echo "Skip."
+        return
+    fi
+
+    echo "Getting $file"
+    wget "$url/$file" -O "$tmp/pkg.deb" -q --tries=0 || die "Failed to download package from $url"
+    pushd "$tmp" 1>/dev/null
+    ar x "$tmp/pkg.deb" || die "ar failed"
+    tar xf $tmp/data.tar.* || die "tar failed"
+    popd 1>/dev/null
+    local t=`ls $tmp/$dbg_pathInDeb | grep linux-gnu`
+    mv "$tmp/$dbg_pathInDeb/$t" "$dbPath/$dirname/.debug"
+    rm -rf "$tmp"
+}
+
+get_glibc_dbg_all(){
+    echo "Getting glibc-dbg index"
+    local indexhtml=`mktemp`
+    wget $url/ -O - -q | grep -o "href=\"${dbg_perfix}[^\"]*${dbg_postfix}\"" > $indexhtml
+    local files=`cat $indexhtml  | awk -F '"' '{print $2}'`
+    local total=`wc -l $indexhtml | awk '{print $1}'`
+    rm $indexhtml
+    echo "Start to download"
+    local i=0
+    for file in $files ; do
+        echo -n -e "\033[35m\033[1m[$i/$total]\033[0m "
+        get_glibc_dbg_deb $file
         ((i++))
     done
     echo "Finish."
@@ -71,4 +115,13 @@ get_all(){
 dbPath="$1"
 mkdir -p $dbPath
 
-get_all
+if [ "$2"x == "all"x ];then
+    get_glibc_all
+    get_glibc_dbg_all
+elif [ "$2"x == "bin"x ];then
+    get_glibc_all
+elif [ "$2"x == "dbg"x ];then
+    get_glibc_dbg_all
+else
+    echo "Unknow parameter \"$2\"."
+fi
