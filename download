@@ -1,20 +1,21 @@
 #!/bin/bash
 
 # glibc mirror url
-# url="http://archive.ubuntu.com/ubuntu/pool/main/g/glibc"
-url="https://mirrors.tuna.tsinghua.edu.cn/ubuntu/pool/main/g/glibc"
+# URL1="http://archive.ubuntu.com/ubuntu/pool/main/g/glibc"
+# URL2="http://archive.ubuntu.com/ubuntu-ports/pool/main/g/glibc"
+URL1="https://mirrors.tuna.tsinghua.edu.cn/ubuntu/pool/main/g/glibc"
+URL2="https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/pool/main/g/glibc/"
 
-# switch to download other type
 perfix="libc6_"
-postfix="\.deb"
 pathInDeb="lib"
 
 dbg_perfix="libc6-dbg_"
-dbg_postfix="\.deb"
 dbg_pathInDeb="usr/lib/debug/lib"
 
-if [[ $# -ne 2 ]]; then
-	echo "Usage: $0 dbPath all|bin|dbg"
+if [[ $# -ne 3 ]]; then
+	echo "Usage: $0 dbPath all|bin|dbg architectures"
+    echo "Use \",\" to divide multiple architectures."
+    echo "Architectures List: amd64,i386,arm64,armhf,ppc64el,s390x"
 	exit 1
 fi
 
@@ -25,8 +26,9 @@ die() {
 
 get_glibc_deb(){
     local file="$1"
+    local url="$2"
     local tmp=`mktemp -d`
-    local dirname=${file%${postfix}}
+    local dirname=${file%.deb}
     dirname=${dirname#${perfix}}
     echo "$file"
 
@@ -36,7 +38,6 @@ get_glibc_deb(){
         return
     fi
 
-    echo "Getting $file"
     wget "$url/$file" -O "$tmp/pkg.deb" -q --tries=0 || die "Failed to download package from $url"
     pushd "$tmp" 1>/dev/null
     ar x "$tmp/pkg.deb" || die "ar failed"
@@ -50,25 +51,34 @@ get_glibc_deb(){
 get_glibc_all(){
     echo "Getting glibc index"
     local indexhtml=`mktemp`
-    wget $url/ -O - -q | grep -o "href=\"${perfix}[^\"]*${postfix}\"" > $indexhtml
-    local files=`cat $indexhtml  | awk -F '"' '{print $2}'`
+    wget $URL1/ -O - -q | grep -Eo "href=\"${perfix}[^\"]*_($archs)\.deb\"" > $indexhtml
+    local files1=`cat $indexhtml  | awk -F '"' '{print $2}'`
     local total=`wc -l $indexhtml | awk '{print $1}'`
+    wget $URL2/ -O - -q | grep -Eo "href=\"${perfix}[^\"]*_($archs)\.deb\"" > $indexhtml
+    local files2=`cat $indexhtml  | awk -F '"' '{print $2}'`
+    (( total=total+`wc -l $indexhtml | awk '{print $1}'` ))
     rm $indexhtml
     echo "Start to download"
     local i=0
-    for file in $files ; do
+    for file in $files1 ; do
+        echo $file
         echo -n -e "\033[35m\033[1m[$i/$total]\033[0m "
-        get_glibc_deb $file
+        get_glibc_deb "$file" "$URL1"
         ((i++))
     done
-    echo "Finish."
+    for file in $files2 ; do
+        echo -n -e "\033[35m\033[1m[$i/$total]\033[0m "
+        get_glibc_deb "$file" "$URL2"
+        ((i++))
+    done
 }
 
 
 get_glibc_dbg_deb(){
     local file="$1"
+    local url="$2"
     local tmp=`mktemp -d`
-    local dirname=${file%${dbg_postfix}}
+    local dirname=${file%.deb}
     dirname=${dirname#${dbg_perfix}}
     echo "$file"
 
@@ -84,7 +94,6 @@ get_glibc_dbg_deb(){
         return
     fi
 
-    echo "Getting $file"
     wget "$url/$file" -O "$tmp/pkg.deb" -q --tries=0 || die "Failed to download package from $url"
     pushd "$tmp" 1>/dev/null
     ar x "$tmp/pkg.deb" || die "ar failed"
@@ -98,21 +107,30 @@ get_glibc_dbg_deb(){
 get_glibc_dbg_all(){
     echo "Getting glibc-dbg index"
     local indexhtml=`mktemp`
-    wget $url/ -O - -q | grep -o "href=\"${dbg_perfix}[^\"]*${dbg_postfix}\"" > $indexhtml
-    local files=`cat $indexhtml  | awk -F '"' '{print $2}'`
+    wget $URL1/ -O - -q | grep -Eo "href=\"${dbg_perfix}[^\"]*_($archs)\.deb\"" > $indexhtml
+    local files1=`cat $indexhtml  | awk -F '"' '{print $2}'`
     local total=`wc -l $indexhtml | awk '{print $1}'`
+    wget $URL2/ -O - -q | grep -Eo "href=\"${dbg_perfix}[^\"]*_($archs)\.deb\"" > $indexhtml
+    local files2=`cat $indexhtml  | awk -F '"' '{print $2}'`
+    (( total=total+`wc -l $indexhtml | awk '{print $1}'` ))
     rm $indexhtml
     echo "Start to download"
     local i=0
-    for file in $files ; do
+    for file in $files1 ; do
+        echo $file
         echo -n -e "\033[35m\033[1m[$i/$total]\033[0m "
-        get_glibc_dbg_deb $file
+        get_glibc_dbg_deb "$file" "$URL1"
         ((i++))
     done
-    echo "Finish."
+    for file in $files2 ; do
+        echo -n -e "\033[35m\033[1m[$i/$total]\033[0m "
+        get_glibc_dbg_deb "$file" "$URL2"
+        ((i++))
+    done
 }
 
 dbPath="$1"
+archs=`echo "$3" | cut -d "," -f1- --output-delimiter="|" `
 mkdir -p $dbPath
 
 if [ "$2"x == "all"x ];then
@@ -123,5 +141,7 @@ elif [ "$2"x == "bin"x ];then
 elif [ "$2"x == "dbg"x ];then
     get_glibc_dbg_all
 else
-    echo "Unknow parameter \"$2\"."
+    die "Unknow parameter \"$2\"."
 fi
+
+echo "Finish."

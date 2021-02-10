@@ -7,9 +7,10 @@ fi
 dbPath=`realpath "$1"`
 pversion="$2"
 targetFile="$3"
-is32=`readelf -h $targetFile | grep "ELF32" -o`
+machine=`readelf $targetFile -h | grep Machine:`
 
 if [[ $pversion == 'system' ]];then
+	is32=`echo -n $machine | grep "Intel 80386" -o`
 	if [[ -n $is32 ]]; then
 		patchelf --set-interpreter /lib/ld-linux.so.2 --set-rpath /lib/i386-linux-gnu $targetFile
 	else
@@ -23,21 +24,33 @@ if [[ -d $dbPath/$pversion ]]; then
 	patchelf --set-interpreter $dbPath/$pversion/ld-$version.so --set-rpath $dbPath/$pversion $targetFile
 fi
 
-if [[ -n $is32 ]]; then
-	list=`ls -1 "$dbPath" | grep "^$pversion.*_i386$"`
-else
-	list=`ls -1 "$dbPath" | grep "^$pversion.*_amd64$"`
-fi
+list=`ls -1 "$dbPath" | grep "^$pversion"`
 
-echo "Avalibable Version:"
 i=0
 for file in $list;do
-	echo "[$i] $file"
-	filelist[$i]=$file
-	((i++))
+	ld_name=`ls $dbPath/$file/ld*.so`
+	ld_machine=`readelf $ld_name -h | grep Machine:`
+	if [[ "$machine"x == "$ld_machine"x ]];then
+		filelist[$i]=$file
+		((i++))
+	fi
 done
-read -p "Please choose one: " index
-pversion="${filelist[$index]}"
+
+if [ $i == 0 ];then
+	echo "No matching version."
+elif [ $i == 1 ];then
+	pversion="${filelist[0]}"
+	echo "Select $pversion."
+else
+	echo "Avalibable Version:"
+	i=0
+	for file in ${filelist[@]};do
+		echo "[$i] $file"
+		((i++))
+	done
+	read -p "Please choose one: " index
+	pversion="${filelist[$index]}"
+fi
 
 version=`echo $pversion | cut -d - -f1`
 patchelf --set-interpreter $dbPath/$pversion/ld-$version.so --set-rpath $dbPath/$pversion $targetFile
