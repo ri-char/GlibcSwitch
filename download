@@ -100,6 +100,9 @@ get_glibc_dbg_deb(){
     tar xf $tmp/data.tar.* || die "tar failed"
     popd 1>/dev/null
     local t=`ls $tmp/$dbg_pathInDeb | grep linux-gnu`
+    if [[ $t =~ "arm-linux-gnueabihf" ]];then
+        t="arm-linux-gnueabihf"
+    fi
     mv "$tmp/$dbg_pathInDeb/$t" "$dbPath/$dirname/.debug"
     rm -rf "$tmp"
 }
