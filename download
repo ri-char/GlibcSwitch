@@ -12,7 +12,7 @@ pathInDeb="lib"
 dbg_perfix="libc6-dbg_"
 dbg_pathInDeb="usr/lib/debug/lib"
 
-if [[ $# -ne 3 ]]; then
+if [[ $# -ne 3 && "$2"x != "sym"x ]]; then
 	echo "Usage: $0 dbPath all|bin|dbg architectures"
     echo "Use \",\" to divide multiple architectures."
     echo "Architectures List: amd64,i386,arm64,armhf,ppc64el,s390x"
@@ -132,6 +132,14 @@ get_glibc_dbg_all(){
     done
 }
 
+generateSymbol(){
+    fileList=`ls $dbPath`
+    for file in $fileList;do
+        libc_name=`realpath $dbPath/$file/libc.so.6`
+        readelf -Ws $libc_name | perl -n -e '/: \w+(\w{3})\s+\w+\s+(?:FUNC|OBJECT)\s+(?:\w+\s+){3}(\w+)\b(?:@@GLIBC)?/ && print "$2 $1\n"' | sort -u > "$dbPath/$file/symbols" || echo "Cannot find file $file/libc.so.6"
+    done
+}
+
 dbPath="$1"
 archs=`echo "$3" | cut -d "," -f1- --output-delimiter="|" `
 mkdir -p $dbPath
@@ -139,10 +147,14 @@ mkdir -p $dbPath
 if [ "$2"x == "all"x ];then
     get_glibc_all
     get_glibc_dbg_all
+    generateSymbol
 elif [ "$2"x == "bin"x ];then
     get_glibc_all
+    generateSymbol
 elif [ "$2"x == "dbg"x ];then
     get_glibc_dbg_all
+elif [ "$2"x == "sym"x ];then
+    generateSymbol
 else
     die "Unknow parameter \"$2\"."
 fi

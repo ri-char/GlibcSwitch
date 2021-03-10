@@ -1,1 +1,7 @@
-db*
+.cache
+db*/
+.vscode/
+*.egg-info/
+build/
+dist/
+__pycache__/

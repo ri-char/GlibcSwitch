@@ -28,11 +28,13 @@ list=`ls -1 "$dbPath" | grep "^$pversion"`
 
 i=0
 for file in $list;do
-	ld_name=`ls $dbPath/$file/ld*.so`
-	ld_machine=`readelf $ld_name -h | grep Machine:`
-	if [[ "$machine"x == "$ld_machine"x ]];then
-		filelist[$i]=$file
-		((i++))
+	ld_name=`ls $dbPath/$file/ld*.so 2> /dev/null`
+	if [ $ld_name ] ; then
+		ld_machine=`readelf $ld_name -h | grep Machine:`
+		if [[ "$machine"x == "$ld_machine"x ]];then
+			filelist[$i]=$file
+			((i++))
+		fi
 	fi
 done
 
